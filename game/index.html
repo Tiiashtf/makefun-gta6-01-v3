@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmar Bay — a GTA-style open-world crime game</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23d8382a'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3ES%3C/text%3E%3C/svg%3E">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0e14; font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+  .panel { background: rgba(8, 12, 18, 0.72); border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 8px 12px; }
+  #stats { position: absolute; top: 12px; left: 12px; min-width: 210px; }
+  #health-bar { width: 100%; height: 10px; background: #333; border-radius: 5px; overflow: hidden; margin: 4px 0 6px; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37c24a, #7be36b); }
+  #health-text, #money, #weapon { font-weight: 700; font-size: 15px; }
+  #money { color: #7be36b; }
+  #stars { font-size: 20px; letter-spacing: 2px; color: #ffd23a; margin-top: 2px; }
+  #clock { position: absolute; top: 12px; right: 12px; font-size: 20px; font-weight: 700; }
+  #speed { position: absolute; right: 14px; bottom: 16px; font-size: 26px; font-weight: 800; text-shadow: 0 2px 6px #000; }
+  #objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 600; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; }
+  #prompt { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 14px; background: rgba(8,12,18,0.72); padding: 6px 14px; border-radius: 20px; }
+  #banner { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); font-size: 24px; font-weight: 800; color: #ffd23a; text-shadow: 0 2px 8px #000; display: none; white-space: nowrap; }
+  #minimap { position: absolute; left: 12px; bottom: 12px; width: 220px; height: 220px; border: 2px solid rgba(255,255,255,0.35); border-radius: 6px; background: #20301f; }
+  #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 26px; color: #fff; text-shadow: 0 0 4px #000; display: none; }
+  #hurt { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,0.55) 100%); opacity: 0; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(5, 8, 14, 0.78); z-index: 10; text-align: center; }
+  .screen h1 { font-size: 64px; letter-spacing: 3px; color: #ffd23a; text-shadow: 0 4px 24px rgba(0,0,0,0.8); }
+  .screen h2 { font-size: 40px; color: #fff; margin-bottom: 8px; }
+  .screen p { font-size: 17px; color: #cfd8e3; max-width: 560px; line-height: 1.55; margin: 10px 0; }
+  .screen button { pointer-events: auto; margin: 8px; padding: 13px 34px; font-size: 18px; font-weight: 700; border: none; border-radius: 8px; background: #d8382a; color: #fff; cursor: pointer; }
+  .screen button:hover { background: #f04a38; }
+  .screen button.secondary { background: #2a4a6b; }
+  .screen .sub { font-size: 13px; color: #8a97a5; margin-top: 14px; }
+  #save-info { color: #7be36b; font-size: 15px; }
+</style>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+<div id="hurt"></div>
+<div id="hud">
+  <div id="stats" class="panel">
+    <div><span id="health-text">HP 100</span> &nbsp; <span id="money">$250</span> &nbsp; <span id="weapon">FISTS</span></div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="stars">&#9734;&#9734;&#9734;&#9734;&#9734;</div>
+  </div>
+  <div id="clock" class="panel">10:00</div>
+  <div id="objective" class="panel">&#9656; Welcome Home — Walk to Mara&rsquo;s Garage and meet Mara</div>
+  <div id="banner"></div>
+  <div id="speed"></div>
+  <canvas id="minimap" width="220" height="220"></canvas>
+  <div id="prompt"></div>
+  <div id="crosshair">+</div>
+</div>
+
+<div id="screen-title" class="screen" style="display:flex">
+  <h1>SOLMAR BAY</h1>
+  <p>Jules Vane is back — broke, in a sunny coastal city run by Victor Kaine.
+  Work for fixer Mara Solis, steal fast cars, outrun the law, and take the Bay back.
+  Six missions. One city. No mercy.</p>
+  <div><button id="btn-new">New Game</button><button id="btn-continue" class="secondary">Continue</button></div>
+  <p id="save-info"></p>
+  <p class="sub">WASD move / drive &middot; mouse drag camera &middot; E enter car &middot; click punch / shoot &middot; Q weapon &middot; Shift run &middot; Space handbrake &middot; R restart mission &middot; Esc pause &middot; M mute</p>
+</div>
+<div id="screen-pause" class="screen">
+  <h2>Paused</h2>
+  <p>Solmar Bay waits for no one. Well — right now it does.</p>
+  <div><button id="btn-resume">Resume</button></div>
+</div>
+<div id="screen-wasted" class="screen">
+  <h2>WASTED</h2>
+  <p id="wasted-text">Jules got taken down. Half his cash is gone with him.</p>
+  <div><button id="btn-respawn">Respawn</button></div>
+</div>
+<div id="screen-busted" class="screen">
+  <h2>BUSTED</h2>
+  <p id="bail-text">The Solmar Bay PD caught up with Jules. Bail paid, record clean — for now.</p>
+  <div><button id="btn-bail">Pay bail &amp; continue</button></div>
+</div>
+<div id="screen-complete" class="screen">
+  <h1 style="font-size:52px">KING OF THE BAY</h1>
+  <p>Kaine&rsquo;s limo is scrap, his crew is scattered, and Solmar Bay belongs to Jules Vane.
+  Keep roaming — the city is yours now.</p>
+  <div><button id="btn-again">Keep playing</button></div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
